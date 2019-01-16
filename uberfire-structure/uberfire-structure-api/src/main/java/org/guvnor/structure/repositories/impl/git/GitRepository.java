@@ -50,14 +50,16 @@ public class GitRepository
     private Collection<String> groups = new ArrayList<>();
     private Collection<Contributor> contributors = new ArrayList<>();
     private boolean requiresRefresh = true;
+    private boolean deleted;
 
     public GitRepository() {
     }
 
     public GitRepository(final String alias,
                          Space space) {
-        this.alias = alias;
-        this.space = space;
+        this(alias,
+             space,
+             false);
     }
 
     public GitRepository(final String alias,
@@ -69,6 +71,14 @@ public class GitRepository
         if (publicURIs != null && !publicURIs.isEmpty()) {
             this.publicURIs.addAll(publicURIs);
         }
+    }
+
+    public GitRepository(final String alias,
+                         final Space space,
+                         final boolean deleted) {
+        this.alias = alias;
+        this.space = space;
+        this.deleted = deleted;
     }
 
     @Override
@@ -184,6 +194,11 @@ public class GitRepository
         } else {
             return Optional.empty();
         }
+    }
+
+    @Override
+    public boolean isDeleted() {
+        return this.deleted;
     }
 
     @Override
