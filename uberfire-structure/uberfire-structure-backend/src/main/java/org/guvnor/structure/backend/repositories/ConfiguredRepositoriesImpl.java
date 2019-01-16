@@ -20,16 +20,12 @@ import java.util.List;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import javax.enterprise.context.ApplicationScoped;
-import javax.enterprise.event.Event;
 import javax.inject.Inject;
-import javax.inject.Named;
 
 import org.guvnor.structure.organizationalunit.config.RepositoryInfo;
 import org.guvnor.structure.organizationalunit.config.SpaceConfigStorageRegistry;
 import org.guvnor.structure.repositories.Branch;
 import org.guvnor.structure.repositories.Repository;
-import org.guvnor.structure.repositories.RepositoryUpdatedEvent;
-import org.guvnor.structure.server.config.ConfigurationFactory;
 import org.guvnor.structure.server.repositories.RepositoryFactory;
 import org.uberfire.backend.server.util.Paths;
 import org.uberfire.backend.vfs.Path;

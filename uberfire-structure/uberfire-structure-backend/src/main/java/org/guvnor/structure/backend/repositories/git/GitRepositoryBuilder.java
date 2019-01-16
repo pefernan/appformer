@@ -37,8 +37,6 @@ import org.guvnor.structure.repositories.RepositoryExternalUpdateEvent;
 import org.guvnor.structure.repositories.impl.DefaultPublicURI;
 import org.guvnor.structure.repositories.impl.git.GitRepository;
 import org.guvnor.structure.server.config.PasswordService;
-import org.guvnor.structure.server.config.SecureConfigItem;
-import org.jboss.errai.security.shared.api.identity.User;
 import org.uberfire.io.IOService;
 import org.uberfire.java.nio.file.FileSystem;
 import org.uberfire.java.nio.file.FileSystemAlreadyExistsException;
