@@ -15,22 +15,10 @@
  */
 package org.uberfire.client;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
-
-import javax.annotation.PostConstruct;
-import javax.enterprise.context.ApplicationScoped;
-import javax.enterprise.event.Observes;
-import javax.enterprise.inject.Produces;
-import javax.inject.Inject;
-
 import com.google.common.collect.Sets;
 import com.google.gwt.animation.client.Animation;
 import com.google.gwt.core.client.GWT;
+import com.google.gwt.core.client.ScriptInjector;
 import com.google.gwt.dom.client.Element;
 import com.google.gwt.dom.client.Style;
 import com.google.gwt.user.client.Window;
@@ -58,6 +46,7 @@ import org.uberfire.client.navbar.SearchMenuBuilder;
 import org.uberfire.client.perspectives.MultiScreenPerspective;
 import org.uberfire.client.perspectives.SimplePerspective;
 import org.uberfire.client.resources.AppResource;
+import org.uberfire.client.resources.JsResources;
 import org.uberfire.client.resources.i18n.Constants;
 import org.uberfire.client.screen.JSWorkbenchScreenActivity;
 import org.uberfire.client.screens.popup.SimplePopUp;
@@ -85,6 +74,13 @@ import org.uberfire.workbench.events.PluginUpdatedEvent;
 import org.uberfire.workbench.model.menu.MenuFactory;
 import org.uberfire.workbench.model.menu.MenuItem;
 import org.uberfire.workbench.model.menu.Menus;
+
+import javax.annotation.PostConstruct;
+import javax.enterprise.context.ApplicationScoped;
+import javax.enterprise.event.Observes;
+import javax.enterprise.inject.Produces;
+import javax.inject.Inject;
+import java.util.*;
 
 import static org.uberfire.workbench.model.menu.MenuFactory.newTopLevelCustomMenu;
 import static org.uberfire.workbench.model.menu.MenuFactory.newTopLevelMenu;
@@ -174,6 +170,10 @@ public class ShowcaseEntryPoint {
         hideLoadingPopup();
         GWT.log("PatternFly version: " + pflyEntryPoint.getPatternFlyVersion());
         GWT.log("Loaded MomentJS using locale: " + pflyEntryPoint.getMomentLocale());
+
+        ScriptInjector.fromString(JsResources.INSTANCE.documents().getText())
+                .setWindow(ScriptInjector.TOP_WINDOW)
+                .inject();
     }
 
     private void setupMenu(@Observes final ApplicationReadyEvent event) {
@@ -285,7 +285,7 @@ public class ShowcaseEntryPoint {
         //Sort Perspective Providers so they're always in the same sequence!
         List<PerspectiveActivity> sortedActivities = new ArrayList<>(activities);
         Collections.sort(sortedActivities,
-                         (o1, o2) -> o1.getName().compareTo(o2.getName()));
+                (o1, o2) -> o1.getName().compareTo(o2.getName()));
 
         return sortedActivities;
     }
@@ -320,7 +320,7 @@ public class ShowcaseEntryPoint {
         return () -> {
             final Image image = new Image(AppResource.INSTANCE.images().ufBrandLogo());
             image.getElement().setAttribute("height",
-                                            "10");
+                    "10");
             return image;
         };
     }
@@ -330,7 +330,7 @@ public class ShowcaseEntryPoint {
         String message = "Plugin " + pluginEvent.getName() +
                 " has been installed. \n A reload is required to activate it.";
         createPluginModal(title,
-                          message);
+                message);
     }
 
     private void onPluginUpdated(@Observes PluginUpdatedEvent pluginEvent) {
@@ -338,7 +338,7 @@ public class ShowcaseEntryPoint {
         String message = "Plugin " + pluginEvent.getName() +
                 " has been updated. \n A reload is required to activate it.";
         createPluginModal(title,
-                          message);
+                message);
     }
 
     private void createPluginModal(String title,

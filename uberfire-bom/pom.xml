@@ -90,6 +90,39 @@
         Always declare the sources jar too and optionally the test-jar.
       -->
 
+      <!-- demo -->
+      <dependency>
+        <groupId>org.uberfire</groupId>
+        <artifactId>appformer-demo-api</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.uberfire</groupId>
+        <artifactId>appformer-demo-api</artifactId>
+        <version>${project.version}</version>
+        <classifier>sources</classifier>
+      </dependency>
+
+      <dependency>
+        <groupId>org.uberfire</groupId>
+        <artifactId>appformer-demo-backend</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.uberfire</groupId>
+        <artifactId>appformer-demo-client</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.uberfire</groupId>
+        <artifactId>appformer-demo-client</artifactId>
+        <version>${project.version}</version>
+        <classifier>sources</classifier>
+      </dependency>
+
       <!-- Showcase WebApp -->
       <dependency>
         <groupId>org.uberfire</groupId>
