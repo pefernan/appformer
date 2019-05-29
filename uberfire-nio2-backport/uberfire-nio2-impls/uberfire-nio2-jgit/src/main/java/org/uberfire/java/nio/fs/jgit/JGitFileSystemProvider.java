@@ -48,6 +48,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import javax.servlet.http.HttpServletRequest;
 
 import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.errors.RepositoryNotFoundException;
@@ -63,18 +64,18 @@ import org.eclipse.jgit.storage.file.WindowCacheConfig;
 import org.eclipse.jgit.transport.CredentialsProvider;
 import org.eclipse.jgit.transport.ReceiveCommand;
 import org.eclipse.jgit.transport.ReceivePack;
-import org.eclipse.jgit.transport.ServiceMayNotContinueException;
 import org.eclipse.jgit.transport.SshSessionFactory;
 import org.eclipse.jgit.transport.UploadPack;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 import org.eclipse.jgit.transport.resolver.ReceivePackFactory;
 import org.eclipse.jgit.transport.resolver.RepositoryResolver;
 import org.eclipse.jgit.transport.resolver.ServiceNotAuthorizedException;
-import org.eclipse.jgit.transport.resolver.ServiceNotEnabledException;
 import org.eclipse.jgit.transport.resolver.UploadPackFactory;
 import org.eclipse.jgit.util.FS;
 import org.eclipse.jgit.util.FileUtils;
 import org.eclipse.jgit.util.ProcessResult;
+import org.jboss.errai.security.shared.api.identity.User;
+import org.jboss.errai.security.shared.service.AuthenticationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.uberfire.commons.async.DescriptiveThreadFactory;
@@ -148,7 +149,6 @@ import org.uberfire.java.nio.fs.jgit.util.model.PathType;
 import org.uberfire.java.nio.fs.jgit.util.model.RevertCommitContent;
 import org.uberfire.java.nio.fs.jgit.ws.JGitFileSystemsEventsManager;
 import org.uberfire.java.nio.fs.jgit.ws.JGitWatchEvent;
-import org.uberfire.java.nio.security.FileSystemAuthenticator;
 import org.uberfire.java.nio.security.FileSystemAuthorizer;
 import org.uberfire.java.nio.security.SSHAuthenticator;
 import org.uberfire.java.nio.security.SecuredFileSystemProvider;
@@ -201,6 +201,9 @@ public class JGitFileSystemProvider implements SecuredFileSystemProvider,
     final KetchSystem system = new KetchSystem();
 
     final KetchLeaderCache leaders = new KetchLeaderCache(system);
+
+    private AuthenticationService httpAuthenticator;
+    private FileSystemAuthorizer authorizer;
 
     JGitFileSystemProviderConfiguration config;
 
@@ -346,21 +349,20 @@ public class JGitFileSystemProvider implements SecuredFileSystemProvider,
     }
 
     @Override
-    public void setAuthenticator(final FileSystemAuthenticator authenticator) {
-        checkNotNull("authenticator",
-                     authenticator);
+    public void setAuthorizer(FileSystemAuthorizer authorizer) {
+        this.authorizer = checkNotNull("authorizer", authorizer);
+    }
+
+    @Override
+    public void setJAASAuthenticator(AuthenticationService authenticator) {
         if (gitSSHService != null) {
             gitSSHService.setUserPassAuthenticator(authenticator);
         }
     }
 
     @Override
-    public void setAuthorizer(FileSystemAuthorizer authorizer) {
-        checkNotNull("authorizer",
-                     authorizer);
-        if (gitSSHService != null) {
-            gitSSHService.setAuthorizationManager(authorizer);
-        }
+    public void setHTTPAuthenticator(final AuthenticationService httpAuthenticator) {
+        this.httpAuthenticator = httpAuthenticator;
     }
 
     @Override
@@ -378,18 +380,30 @@ public class JGitFileSystemProvider implements SecuredFileSystemProvider,
         shutdown();
     }
 
+    public void addHostName(final String protocol, String s) {
+        fullHostNames.put(protocol, s);
+    }
+
+    public Map<String, String> getFullHostNames() {
+        return new HashMap<>(fullHostNames);
+    }
+
     public class RepositoryResolverImpl<T> implements RepositoryResolver<T> {
 
         @Override
         public Repository open(final T client,
                                final String name)
-                throws RepositoryNotFoundException,
-                ServiceNotAuthorizedException, ServiceNotEnabledException,
-                ServiceMayNotContinueException {
+                throws RepositoryNotFoundException, ServiceNotAuthorizedException {
+            final User user = extractUser(client);
             final JGitFileSystem fs = fsManager.get(name);
             if (fs == null) {
                 throw new RepositoryNotFoundException(name);
             }
+
+            if (authorizer != null && !authorizer.authorize(fs, user)) {
+                throw new ServiceNotAuthorizedException("User not authorized.");
+            }
+
             return fs.getGit().getRepository();
         }
 
@@ -398,45 +412,18 @@ public class JGitFileSystemProvider implements SecuredFileSystemProvider,
         }
     }
 
+    private User extractUser(Object client) {
+        if (httpAuthenticator != null && client instanceof HttpServletRequest) {
+            return httpAuthenticator.getUser();
+        } else if (client instanceof BaseGitCommand) {
+            return ((BaseGitCommand) client).getUser();
+        }
+
+        return User.ANONYMOUS;
+    }
+
     private void buildAndStartSSH() {
-        final ReceivePackFactory receivePackFactory = (ReceivePackFactory<BaseGitCommand>) (req, db) -> new ReceivePack(db) {{
-
-            final JGitFileSystem fs = fsManager.get(db);
-            final Map<String, RevCommit> oldTreeRefs = new HashMap<>();
-
-            setPreReceiveHook((rp, commands2) -> {
-                fs.lock();
-                for (final ReceiveCommand command : commands2) {
-                    fs.checkBranchAccess(command,
-                                         req.getUser());
-                    final RevCommit lastCommit = fs.getGit().getLastCommit(command.getRefName());
-                    oldTreeRefs.put(command.getRefName(),
-                                    lastCommit);
-                }
-            });
-
-            setPostReceiveHook((rp, commands) -> {
-                fs.unlock();
-                fs.notifyExternalUpdate();
-                final String userName = req.getUser().getName();
-                for (Map.Entry<String, RevCommit> oldTreeRef : oldTreeRefs.entrySet()) {
-                    final List<RevCommit> commits = fs.getGit().listCommits(oldTreeRef.getValue(),
-                                                                            fs.getGit().getLastCommit(oldTreeRef.getKey()));
-                    for (final RevCommit revCommit : commits) {
-                        final RevTree parent = revCommit.getParentCount() > 0 ? revCommit.getParent(0).getTree() : null;
-                        notifyDiffs(fs,
-                                    oldTreeRef.getKey(),
-                                    "<ssh>",
-                                    userName,
-                                    revCommit.getFullMessage(),
-                                    parent,
-                                    revCommit.getTree());
-                    }
-                }
-
-                //broadcast changes
-            });
-        }};
+        final ReceivePackFactory receivePackFactory = (req, db) -> getReceivePack("ssh", req, db);
 
         final UploadPackFactory uploadPackFactory = (UploadPackFactory<BaseGitCommand>) (req, db) -> new UploadPack(db) {{
             final JGitFileSystem fs = fsManager.get(db);
@@ -453,12 +440,58 @@ public class JGitFileSystemProvider implements SecuredFileSystemProvider,
                             config.getSshAlgorithm(),
                             receivePackFactory,
                             uploadPackFactory,
-                            new RepositoryResolverImpl<>(),
+                            getRepositoryResolver(),
                             executorService,
                             config.getGitSshCiphers(),
                             config.getGitSshMACs());
 
         gitSSHService.start();
+    }
+
+    public <T> ReceivePack getReceivePack(final String protocol, final T req, final Repository db) {
+        return new ReceivePack(db) {
+            {
+
+                final JGitFileSystem fs = fsManager.get(db);
+                final Map<String, RevCommit> oldTreeRefs = new HashMap<>();
+
+                setPreReceiveHook((rp, commands2) -> {
+                    fs.lock();
+                    final User user = extractUser(req);
+                    for (final ReceiveCommand command : commands2) {
+                        fs.checkBranchAccess(command,
+                                             user);
+                        final RevCommit lastCommit = fs.getGit().getLastCommit(command.getRefName());
+                        oldTreeRefs.put(command.getRefName(),
+                                        lastCommit);
+                    }
+                });
+
+                setPostReceiveHook((rp, commands) -> {
+                    fs.unlock();
+                    fs.notifyExternalUpdate();
+                    final User user = extractUser(req);
+                    for (Map.Entry<String, RevCommit> oldTreeRef : oldTreeRefs.entrySet()) {
+                        final List<RevCommit> commits = fs.getGit().listCommits(oldTreeRef.getValue(),
+                                                                                fs.getGit().getLastCommit(oldTreeRef.getKey()));
+                        for (final RevCommit revCommit : commits) {
+                            final RevTree parent = revCommit.getParentCount() > 0 ? revCommit.getParent(0).getTree() : null;
+                            notifyDiffs(fs,
+                                        oldTreeRef.getKey(),
+                                        "<" + protocol + ">",
+                                        user.getIdentifier(),
+                                        revCommit.getFullMessage(),
+                                        parent,
+                                        revCommit.getTree());
+                        }
+                    }
+                    });
+            }
+        };
+    }
+
+    public <T> RepositoryResolverImpl<T> getRepositoryResolver() {
+        return new RepositoryResolverImpl<>();
     }
 
     void buildAndStartDaemon() {
@@ -2568,6 +2601,10 @@ public class JGitFileSystemProvider implements SecuredFileSystemProvider,
 
     GitSSHService getGitSSHService() {
         return gitSSHService;
+    }
+
+    public JGitFileSystemProviderConfiguration getConfig() {
+        return config;
     }
 
     /**
