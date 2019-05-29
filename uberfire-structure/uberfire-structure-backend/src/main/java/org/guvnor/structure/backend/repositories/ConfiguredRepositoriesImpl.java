@@ -114,9 +114,10 @@ public class ConfiguredRepositoriesImpl implements ConfiguredRepositories {
         return this.getAllConfiguredRepositories(space).stream().filter(r -> {
             if (r.getBranches() != null) {
                 for (final Branch branch : r.getBranches()) {
-
                     Path rootPath = Paths.normalizePath(branch.getPath());
-                    return root.equals(rootPath);
+                    if (root.equals(rootPath)) {
+                        return true;
+                    }
                 }
                 return false;
             } else {
