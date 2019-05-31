@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
-
 import javax.enterprise.event.Event;
 
 import org.eclipse.jgit.transport.ReceiveCommand;
@@ -37,6 +36,7 @@ import org.guvnor.structure.repositories.RepositoryExternalUpdateEvent;
 import org.guvnor.structure.repositories.impl.DefaultPublicURI;
 import org.guvnor.structure.repositories.impl.git.GitRepository;
 import org.guvnor.structure.server.config.PasswordService;
+import org.jboss.errai.security.shared.api.identity.User;
 import org.uberfire.io.IOService;
 import org.uberfire.java.nio.file.FileSystem;
 import org.uberfire.java.nio.file.FileSystemAlreadyExistsException;
@@ -78,8 +78,7 @@ public class GitRepositoryBuilder {
             throw new IllegalStateException("Repository " + repositoryInfo.getName() + " space is not valid");
         }
         repo = new GitRepository(repositoryInfo.getName(),
-                                 spacesAPI.getSpace(space),
-                                 repositoryInfo.isDeleted());
+                                 spacesAPI.getSpace(space));
 
         if (!repo.isValid()) {
             throw new IllegalStateException("Repository " + repositoryInfo.getName() + " not valid");
@@ -163,12 +162,17 @@ public class GitRepositoryBuilder {
         return ioService.newFileSystem(uri,
                                        new HashMap<String, Object>(repo.getEnvironment()) {{
                                            if (!repo.getEnvironment().containsKey("origin")) {
-                                               put("init", true);
+                                               put("init",
+                                                   true);
                                            }
-                                           put(FileSystemHooks.ExternalUpdate.name(), externalUpdatedCallBack());
-                                           put(FileSystemHooks.PostCommit.name(), postCommitCallback());
-                                           put(FileSystemHooks.BranchAccessCheck.name(), checkBranchAccessCallback());
-                                           put(FileSystemHooks.BranchAccessFilter.name(), filterBranchAccessCallback());
+                                           put(FileSystemHooks.ExternalUpdate.name(),
+                                               externalUpdatedCallBack());
+                                           put(FileSystemHooks.PostCommit.name(),
+                                               postCommitCallback());
+                                           put(FileSystemHooks.BranchAccessCheck.name(),
+                                               checkBranchAccessCallback());
+                                           put(FileSystemHooks.BranchAccessFilter.name(),
+                                               filterBranchAccessCallback());
                                        }});
     }
 

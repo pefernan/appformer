@@ -3,8 +3,8 @@ package org.guvnor.structure.backend;
 import java.io.File;
 import java.net.URI;
 import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Stream;
 import javax.ejb.Schedule;
 import javax.ejb.Singleton;
 import javax.ejb.Startup;
@@ -27,10 +27,11 @@ import org.uberfire.java.nio.fs.jgit.JGitPathImpl;
 import org.uberfire.spaces.Space;
 import org.uberfire.spaces.SpacesAPI;
 
+import static java.util.stream.Collectors.toList;
 import static org.uberfire.backend.server.util.Paths.convert;
 
-@Singleton
-@Startup
+//@Singleton
+//@Startup
 public class FileSystemDeleteWorker {
 
     private static final int LAST_ACCESS_THRESHOLD = 10;
@@ -60,7 +61,7 @@ public class FileSystemDeleteWorker {
         this.systemFS = systemFS;
     }
 
-    @Schedule(hour = "*", minute = CRON_MINUTES, persistent = false)
+//    @Schedule(hour = "*", minute = CRON_MINUTES, persistent = false)
     public void doRemove() {
         ifDebugEnabled(logger,
                        () -> logger.debug("Trying to acquire lock"));
@@ -79,50 +80,52 @@ public class FileSystemDeleteWorker {
         }
     }
 
-    private void removeAllDeletedRepositories() {
-        ifDebugEnabled(logger,
-                       () -> logger.debug("Removing all deleted repositories"));
-        Collection<OrganizationalUnit> spaces = this.organizationalUnitService.getAllOrganizationalUnits();
-        Stream<OrganizationalUnit> spacesWithDeletedRepositories = spaces.stream()
-                .filter(organizationalUnit ->
-                                organizationalUnit
-                                        .getRepositories()
-                                        .stream()
-                                        .anyMatch(repository -> repository.isDeleted()));
+    protected void removeAllDeletedRepositories() {
+        try {
+            ifDebugEnabled(logger,
+                           () -> logger.debug("Removing all deleted repositories"));
+            Collection<OrganizationalUnit> spaces = this.organizationalUnitService.getAllOrganizationalUnits();
+            List<Repository> deletedRepositories = spaces.stream()
+                    .map(organizationalUnit ->
+                                 this.repositoryService.getAllDeletedRepositories(organizationalUnit.getSpace()))
+                    .flatMap(x -> x.stream()).collect(toList());
 
-        ifDebugEnabled(logger,
-                       () -> logger.debug("Found {} spaces with deleted repositories",
-                                          spacesWithDeletedRepositories.count()));
+            ifDebugEnabled(logger,
+                           () -> logger.debug("Found {} spaces with deleted repositories",
+                                              deletedRepositories.size()));
 
-        spacesWithDeletedRepositories
-                .forEach(organizationalUnit ->
-                                 this.removeRepositories(organizationalUnit));
+            deletedRepositories
+                    .forEach(organizationalUnit ->
+                                     this.removeRepository(organizationalUnit));
 
-        ifDebugEnabled(logger,
-                       () -> logger.debug("Deleted repositories had been removed"));
+            ifDebugEnabled(logger,
+                           () -> logger.debug("Deleted repositories had been removed"));
+        } catch (Exception e) {
+            ifDebugEnabled(logger,
+                           () -> logger.error("Error when trying to remove all deleted repositories",
+                                              e));
+        }
     }
 
-    private void removeRepositories(OrganizationalUnit organizationalUnit) {
-        organizationalUnit
-                .getRepositories()
-                .stream()
-                .filter(repository -> repository.isDeleted())
-                .forEach(repository -> this.removeRepositories(repository));
+    protected void removeAllDeletedSpaces() {
+        try {
+            ifDebugEnabled(logger,
+                           () -> logger.debug("Removing all deleted spaces"));
+            Collection<OrganizationalUnit> deletedSpaces = this.organizationalUnitService.getAllDeletedOrganizationalUnit();
+            ifDebugEnabled(logger,
+                           () -> logger.debug("Found {} spaces to be deleted",
+                                              deletedSpaces.size()));
+            deletedSpaces.forEach(ou -> this.removeSpaceDirectory(ou.getSpace()));
+            ifDebugEnabled(logger,
+                           () -> logger.debug("Deleted spaces had been removed"));
+        } catch (Exception e) {
+            ifDebugEnabled(logger,
+                           () -> logger.error("Error when trying to remove all deleted Spaces",
+                                              e));
+        }
     }
 
-    private void removeAllDeletedSpaces() {
-        ifDebugEnabled(logger,
-                       () -> logger.debug("Removing all deleted spaces"));
-        Collection<OrganizationalUnit> deletedSpaces = this.organizationalUnitService.getAllDeletedOrganizationalUnit();
-        ifDebugEnabled(logger,
-                       () -> logger.debug("Found {} spaces to be deleted",
-                                          deletedSpaces.size()));
-        deletedSpaces.forEach(ou -> this.removeSpaceDirectory(ou.getSpace()));
-        ifDebugEnabled(logger,
-                       () -> logger.debug("Deleted spaces had been removed"));
-    }
-
-    private void removeSpaceDirectory(final Space space) {
+    protected void removeSpaceDirectory(final Space space) {
 
         final URI configPathURI = getConfigPathUri(space);
         final Path configPath = ioService.get(configPathURI);
@@ -132,9 +135,14 @@ public class FileSystemDeleteWorker {
         spacePath.delete();
     }
 
-    private File getSpacePath(JGitPathImpl configPath) {
+    protected File getSpacePath(JGitPathImpl configPath) {
         final JGitPathImpl configGitPath = configPath;
-        return configGitPath.getFileSystem().getGit().getRepository().getDirectory().getParentFile().getParentFile();
+        return configGitPath.getFileSystem()
+                .getGit()
+                .getRepository()
+                .getDirectory()     // system.git
+                .getParentFile()    // system
+                .getParentFile();   //.niogit
     }
 
     private URI getConfigPathUri(Space space) {
@@ -142,7 +150,7 @@ public class FileSystemDeleteWorker {
                                                                 space.getName()));
     }
 
-    private void removeRepositories(final Repository repo) {
+    protected void removeRepository(final Repository repo) {
         Branch defaultBranch = repo.getDefaultBranch().orElseThrow(() -> new IllegalStateException("Repository should have at least one branch."));
         ioService.delete(convert(defaultBranch.getPath()).getFileSystem().getPath(null));
     }
@@ -156,7 +164,7 @@ public class FileSystemDeleteWorker {
     }
 
     private boolean lockedOperation(Runnable runnable) {
-        FileSystemLock physicalLock = createLock(this.getSystemRepository().getParentFile());
+        FileSystemLock physicalLock = createLock(this.getSystemRepository().getParentFile().getParentFile());
         try {
             if (!physicalLock.hasBeenInUse()) {
                 physicalLock.lock();
@@ -170,10 +178,12 @@ public class FileSystemDeleteWorker {
         }
     }
 
-    private FileSystemLock createLock(File file) {
+    protected FileSystemLock createLock(File file) {
+        ifDebugEnabled(logger,
+                       () -> logger.debug("Acquiring lock: " + file.getAbsolutePath() + " - " + LOCK_NAME));
         return FileSystemLockManager
                 .getInstance()
-                .getFileSystemLock(file,
+                .getFileSystemLock(file.getParentFile(),
                                    LOCK_NAME,
                                    LAST_ACCESS_TIME_UNIT,
                                    LAST_ACCESS_THRESHOLD);

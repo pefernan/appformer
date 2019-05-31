@@ -57,9 +57,8 @@ public class GitRepository
 
     public GitRepository(final String alias,
                          Space space) {
-        this(alias,
-             space,
-             false);
+        this.alias = alias;
+        this.space = space;
     }
 
     public GitRepository(final String alias,
@@ -71,14 +70,6 @@ public class GitRepository
         if (publicURIs != null && !publicURIs.isEmpty()) {
             this.publicURIs.addAll(publicURIs);
         }
-    }
-
-    public GitRepository(final String alias,
-                         final Space space,
-                         final boolean deleted) {
-        this.alias = alias;
-        this.space = space;
-        this.deleted = deleted;
     }
 
     @Override
@@ -194,11 +185,6 @@ public class GitRepository
         } else {
             return Optional.empty();
         }
-    }
-
-    @Override
-    public boolean isDeleted() {
-        return this.deleted;
     }
 
     @Override

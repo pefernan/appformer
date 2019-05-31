@@ -72,6 +72,11 @@ public interface RepositoryService {
                                               final boolean includeDeleted);
 
     /**
+     * Get all the repositories. Security checks are omitted.
+     */
+    Collection<Repository> getAllDeletedRepositories(final Space space);
+
+    /**
      * Get all the repositories from all user spaces. Security checks are omitted.
      */
     Collection<Repository> getAllRepositoriesFromAllUserSpaces();

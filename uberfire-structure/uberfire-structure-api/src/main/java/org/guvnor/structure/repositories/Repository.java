@@ -76,5 +76,4 @@ public interface Repository
      */
     Optional<Branch> getDefaultBranch();
 
-    boolean isDeleted();
 }

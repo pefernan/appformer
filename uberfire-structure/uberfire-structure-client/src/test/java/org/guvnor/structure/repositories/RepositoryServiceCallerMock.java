@@ -155,6 +155,13 @@ public class RepositoryServiceCallerMock
         }
 
         @Override
+        public Collection<Repository> getAllDeletedRepositories(Space space) {
+            Collection<Repository> result = repositoryService.getAllDeletedRepositories(space);
+            remoteCallback.callback(result);
+            return result;
+        }
+
+        @Override
         public Collection<Repository> getAllRepositoriesFromAllUserSpaces() {
             Collection<Repository> result = repositoryService.getAllRepositoriesFromAllUserSpaces();
             remoteCallback.callback(result);

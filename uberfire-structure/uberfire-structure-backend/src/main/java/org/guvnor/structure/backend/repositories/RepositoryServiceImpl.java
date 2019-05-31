@@ -263,6 +263,13 @@ public class RepositoryServiceImpl implements RepositoryService {
     }
 
     @Override
+    public Collection<Repository> getAllDeletedRepositories(final Space space) {
+        return this.getAllRepositories(space,
+                                       false);
+    }
+
+
+    @Override
     public Collection<Repository> getAllRepositories(Space space,
                                                      boolean includeDeleted) {
         return configuredRepositories.getAllConfiguredRepositories(space,
