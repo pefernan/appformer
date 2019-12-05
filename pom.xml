@@ -900,6 +900,7 @@
     <module>appformer-js-bridge</module>
     <module>appformer-js</module>
     <module>appformer-kogito-bridge</module>
+    <module>uberfire-collaboration</module>
   </modules>
 
   <dependencyManagement>
